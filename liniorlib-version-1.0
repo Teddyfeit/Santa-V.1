@@ -1041,6 +1041,269 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════
+-- SANTA VISUALS — atmosphere, bloom, CC, fog, vignette
+-- ══════════════════════════════════════════════════════════════════
+local PlayerGui = LocalPlayer:WaitForChild('PlayerGui')
+
+local function svCreate(className, props, parent)
+    local inst = Instance.new(className)
+    local propParent = nil
+    for key, value in pairs(props) do
+        if key == 'Parent' then propParent = value
+        else inst[key] = value end
+    end
+    inst.Parent = propParent or parent
+    return inst
+end
+
+local SV_Original = {
+    Exposure  = Lighting.ExposureCompensation,
+    ClockTime = Lighting.ClockTime,
+    FogStart  = Lighting.FogStart,
+    FogEnd    = Lighting.FogEnd,
+    FogColor  = Lighting.FogColor,
+    Fov       = workspace.CurrentCamera and workspace.CurrentCamera.FieldOfView or 70,
+}
+
+local SV = {
+    Enabled        = true,
+    AtmoEnabled    = true,
+    Density        = 0.32,
+    Offset         = 0.5,
+    Haze           = 1.8,
+    Glare          = 0.35,
+    AtmoColor      = Color3.fromRGB(199, 199, 199),
+    AtmoDecay      = Color3.fromRGB(106, 112, 125),
+    CcEnabled      = true,
+    Brightness     = 0,
+    Contrast       = 0.12,
+    Saturation     = 0.12,
+    Exposure       = 0.12,
+    TintColor      = Color3.fromRGB(255, 244, 230),
+    FogEnabled     = false,
+    FogStart       = 150,
+    FogEnd         = 1400,
+    FogColor       = Color3.fromRGB(190, 200, 215),
+    VignetteEnabled  = true,
+    VignetteStrength = 0.5,
+}
+
+local SV_Presets = {
+    ['Default'] = {
+        AtmoEnabled=false, CcEnabled=false, FogEnabled=false, VignetteEnabled=false, Exposure=0,
+    },
+    ['Cinematic'] = {
+        AtmoEnabled=true, Density=0.32, Haze=1.8, Glare=0.35,
+        AtmoColor=Color3.fromRGB(199,199,199), AtmoDecay=Color3.fromRGB(106,112,125),
+        CcEnabled=true, Contrast=0.12, Saturation=0.12,
+        TintColor=Color3.fromRGB(255,244,230), Exposure=0.12,
+        VignetteEnabled=true, VignetteStrength=0.5, FogEnabled=false,
+    },
+    ['Hazy'] = {
+        AtmoEnabled=true, Density=0.55, Haze=3.5, Glare=0.15,
+        AtmoColor=Color3.fromRGB(220,220,225), AtmoDecay=Color3.fromRGB(140,145,160),
+        CcEnabled=true, Contrast=0.05, Saturation=-0.08,
+        TintColor=Color3.fromRGB(245,245,250), Exposure=0.08,
+        FogEnabled=true, FogStart=80, FogEnd=900, FogColor=Color3.fromRGB(205,210,220),
+        VignetteEnabled=true, VignetteStrength=0.35,
+    },
+    ['Vibrant'] = {
+        AtmoEnabled=true, Density=0.25, Haze=1.2, Glare=0.45,
+        AtmoColor=Color3.fromRGB(199,199,199), AtmoDecay=Color3.fromRGB(106,112,125),
+        CcEnabled=true, Contrast=0.22, Saturation=0.4,
+        TintColor=Color3.fromRGB(255,255,255), Exposure=0.1,
+        VignetteEnabled=false, FogEnabled=false,
+    },
+    ['Noir'] = {
+        AtmoEnabled=true, Density=0.4, Haze=2.2, Glare=0.1,
+        AtmoColor=Color3.fromRGB(160,160,170), AtmoDecay=Color3.fromRGB(60,60,70),
+        CcEnabled=true, Contrast=0.3, Saturation=-0.85, Brightness=-0.03,
+        TintColor=Color3.fromRGB(235,235,240), Exposure=-0.05,
+        VignetteEnabled=true, VignetteStrength=0.75,
+        FogEnabled=true, FogStart=100, FogEnd=700, FogColor=Color3.fromRGB(40,40,48),
+    },
+    ['Night'] = {
+        AtmoEnabled=true, Density=0.45, Haze=2.5, Glare=0.05,
+        AtmoColor=Color3.fromRGB(120,135,170), AtmoDecay=Color3.fromRGB(40,45,70),
+        CcEnabled=true, Contrast=0.15, Saturation=-0.15,
+        TintColor=Color3.fromRGB(200,215,255), Exposure=-0.1,
+        VignetteEnabled=true, VignetteStrength=0.6,
+        FogEnabled=true, FogStart=60, FogEnd=600, FogColor=Color3.fromRGB(25,30,50),
+    },
+}
+
+local SV_Atmosphere = svCreate('Atmosphere', { Name='SantaAtmosphere', Color=SV.AtmoColor, Decay=SV.AtmoDecay }, nil)
+local SV_CC         = svCreate('ColorCorrectionEffect',  { Name='SantaColorCorrection', Parent=Lighting })
+
+local svVigGui = svCreate('ScreenGui', {
+    Name='SantaVignette', IgnoreGuiInset=true, ResetOnSpawn=false,
+    DisplayOrder=100, Enabled=false, Parent=PlayerGui,
+})
+local svGrads = {}
+local function svMakeEdge(name, size, pos, rot)
+    local f = svCreate('Frame', {
+        Name=name, Size=size, Position=pos,
+        BackgroundColor3=Color3.new(0,0,0), BackgroundTransparency=0,
+        BorderSizePixel=0, ZIndex=5,
+    }, svVigGui)
+    local g = svCreate('UIGradient', {
+        Rotation=rot,
+        Transparency=NumberSequence.new({ NumberSequenceKeypoint.new(0,1), NumberSequenceKeypoint.new(1,1) }),
+    }, f)
+    table.insert(svGrads, g)
+end
+svMakeEdge('Top',    UDim2.new(1,0,0.32,0), UDim2.new(0,0,0,0),     90)
+svMakeEdge('Bottom', UDim2.new(1,0,0.32,0), UDim2.new(0,0,0.68,0), 270)
+svMakeEdge('Left',   UDim2.new(0.32,0,1,0), UDim2.new(0,0,0,0),      0)
+svMakeEdge('Right',  UDim2.new(0.32,0,1,0), UDim2.new(0.68,0,0,0), 180)
+
+local sv_fovOverridden = false
+local sv_fogActive     = false
+local sv_expActive     = false
+
+local function svApplyVignette()
+    svVigGui.Enabled = SV.Enabled and SV.VignetteEnabled
+    if not svVigGui.Enabled then return end
+    local opaque = 1 - math.clamp(SV.VignetteStrength, 0, 1)
+    for _, g in ipairs(svGrads) do
+        g.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, opaque),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+    end
+end
+
+local function svApply()
+    local on = SV.Enabled
+    if on and SV.AtmoEnabled then
+        SV_Atmosphere.Parent  = Lighting
+        SV_Atmosphere.Density = SV.Density
+        SV_Atmosphere.Offset  = SV.Offset
+        SV_Atmosphere.Haze    = SV.Haze
+        SV_Atmosphere.Glare   = SV.Glare
+        SV_Atmosphere.Color   = SV.AtmoColor
+        SV_Atmosphere.Decay   = SV.AtmoDecay
+    else
+        SV_Atmosphere.Parent = nil
+    end
+    SV_CC.Enabled = on and SV.CcEnabled
+    if SV_CC.Enabled then
+        SV_CC.Brightness = SV.Brightness
+        SV_CC.Contrast   = SV.Contrast
+        SV_CC.Saturation = SV.Saturation
+        SV_CC.TintColor  = SV.TintColor
+    end
+    local wantExp = on and SV.CcEnabled
+    if wantExp then Lighting.ExposureCompensation = SV.Exposure
+    elseif sv_expActive then Lighting.ExposureCompensation = SV_Original.Exposure end
+    sv_expActive = wantExp
+    local wantFog = on and SV.FogEnabled
+    if wantFog then
+        Lighting.FogStart = SV.FogStart
+        Lighting.FogEnd   = SV.FogEnd
+        Lighting.FogColor = SV.FogColor
+    elseif sv_fogActive then
+        Lighting.FogStart = SV_Original.FogStart
+        Lighting.FogEnd   = SV_Original.FogEnd
+        Lighting.FogColor = SV_Original.FogColor
+    end
+    sv_fogActive = wantFog
+    svApplyVignette()
+end
+
+local SV_Sync = {}
+local function svBindValue(idx, kind, key)
+    table.insert(SV_Sync, { kind=kind, idx=idx, key=key })
+end
+local function svToggle(parent, idx, key, opts)
+    opts.Callback = function(v) SV[key] = v; svApply() end
+    parent:AddToggle(idx, opts)
+    svBindValue(idx, 'toggle', key)
+end
+local function svSlider(parent, idx, key, opts)
+    opts.Callback = function(v) SV[key] = v; svApply() end
+    parent:AddSlider(idx, opts)
+    svBindValue(idx, 'slider', key)
+end
+local function svColor(parent, label, idx, key, default)
+    parent:AddLabel(label):AddColorPicker(idx, {
+        Default  = default,
+        Callback = function(v) SV[key] = v; svApply() end,
+    })
+    svBindValue(idx, 'color', key)
+end
+local function svSyncUI()
+    for _, e in ipairs(SV_Sync) do
+        local cur = SV[e.key]
+        if e.kind == 'toggle' then
+            if Toggles[e.idx] and Toggles[e.idx].Value ~= cur then Toggles[e.idx]:SetValue(cur) end
+        elseif e.kind == 'slider' then
+            if Options[e.idx] and Options[e.idx].Value ~= cur then Options[e.idx]:SetValue(cur) end
+        elseif e.kind == 'color' then
+            if Options[e.idx] and Options[e.idx].Value ~= cur then Options[e.idx]:SetValueRGB(cur) end
+        end
+    end
+end
+local function svApplyPreset(name)
+    local p = SV_Presets[name]; if not p then return end
+    for k, v in pairs(p) do SV[k] = v end
+    svSyncUI(); svApply()
+end
+
+-- ── Silent Aim ────────────────────────────────────────────────────
+local silentAim = {
+    enabled   = false,
+    teamCheck = false,
+    fov       = 200,
+    hitpart   = 'Head',
+}
+
+local function getSilentTarget()
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local best, bestDist = nil, silentAim.fov
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer or not p.Character then continue end
+        local hum  = p.Character:FindFirstChildOfClass('Humanoid')
+        local part = p.Character:FindFirstChild(silentAim.hitpart)
+                  or p.Character:FindFirstChild('HumanoidRootPart')
+        if not hum or hum.Health <= 0 or not part then continue end
+        if silentAim.teamCheck and p.Team == LocalPlayer.Team then continue end
+        local sp, onScreen = Camera:WorldToViewportPoint(part.Position)
+        if not onScreen then continue end
+        local dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            best     = part
+        end
+    end
+
+    return best
+end
+
+local SA_mt = getrawmetatable(game)
+local SA_old = SA_mt.__index
+setreadonly(SA_mt, false)
+
+SA_mt.__index = newcclosure(function(self, key)
+    if silentAim.enabled and key == 'Hit' and self == Mouse then
+        local target = getSilentTarget()
+        if target then
+            return target.CFrame
+        end
+    end
+    if silentAim.enabled and key == 'Target' and self == Mouse then
+        local target = getSilentTarget()
+        if target then
+            return target
+        end
+    end
+    return SA_old(self, key)
+end)
+
+setreadonly(SA_mt, true)
+
+-- ══════════════════════════════════════════════════════════════════
 -- LINORIA GUI & INITIALIZATION
 -- ══════════════════════════════════════════════════════════════════
 local Window = Library:CreateWindow({
@@ -1462,6 +1725,52 @@ TimeGroup:AddButton({
     end
 })
 
+-- ══════════════════════════════════════════════════════════════════
+-- SANTA VISUALS — PRESETS & PRESET CONTROLS
+-- ══════════════════════════════════════════════════════════════════
+local SV_PresetGrp = Tabs.Visuals:AddLeftGroupbox('SV Presets')
+SV_PresetGrp:AddDropdown('SV_PresetSelect', {
+    Values  = { 'Default','Cinematic','Hazy','Vibrant','Noir','Night' },
+    Default = 1,
+    Text    = 'Preset',
+})
+SV_PresetGrp:AddButton({ Text='Apply Preset', Func=function() svApplyPreset(Options.SV_PresetSelect.Value) end })
+
+local SV_AtmoGrp = Tabs.Visuals:AddLeftGroupbox('Atmosphere')
+svToggle(SV_AtmoGrp, 'SV_AtmoOn', 'AtmoEnabled', { Text='Enable Atmosphere', Default=false })
+local SV_AtmoBox = SV_AtmoGrp:AddDependencyBox()
+svSlider(SV_AtmoBox, 'SV_Density',   'Density', { Text='Density', Default=0.32, Min=0, Max=1,  Rounding=2 })
+svSlider(SV_AtmoBox, 'SV_Offset',    'Offset',  { Text='Offset',  Default=0.5,  Min=0, Max=1,  Rounding=2 })
+svSlider(SV_AtmoBox, 'SV_Haze',      'Haze',    { Text='Haze',    Default=1.8,  Min=0, Max=10, Rounding=1 })
+svSlider(SV_AtmoBox, 'SV_Glare',     'Glare',   { Text='Glare',   Default=0.35, Min=0, Max=2,  Rounding=2 })
+svColor(SV_AtmoBox,  'Atmo Color',   'SV_AtmoColor', 'AtmoColor', Color3.fromRGB(199,199,199))
+svColor(SV_AtmoBox,  'Decay Color',  'SV_AtmoDecay', 'AtmoDecay', Color3.fromRGB(106,112,125))
+SV_AtmoBox:SetupDependencies({ { Toggles.SV_AtmoOn, true } })
+
+local SV_FogGrp = Tabs.Visuals:AddRightGroupbox('SV Fog')
+svToggle(SV_FogGrp, 'SV_FogOn', 'FogEnabled', { Text='Enable Fog', Default=false })
+local SV_FogBox = SV_FogGrp:AddDependencyBox()
+svSlider(SV_FogBox, 'SV_FogStart', 'FogStart', { Text='Fog Start', Default=150,  Min=0,   Max=2000,  Rounding=0 })
+svSlider(SV_FogBox, 'SV_FogEnd',   'FogEnd',   { Text='Fog End',   Default=1400, Min=100, Max=10000, Rounding=0 })
+svColor(SV_FogBox,  'Fog Color',   'SV_FogColor', 'FogColor', Color3.fromRGB(190,200,215))
+SV_FogBox:SetupDependencies({ { Toggles.SV_FogOn, true } })
+
+local SV_VigGrp = Tabs.Visuals:AddRightGroupbox('Vignette')
+svToggle(SV_VigGrp, 'SV_VigOn', 'VignetteEnabled', { Text='Enable Vignette', Default=true })
+local SV_VigBox = SV_VigGrp:AddDependencyBox()
+svSlider(SV_VigBox, 'SV_VigStr', 'VignetteStrength', { Text='Strength', Default=0.5, Min=0, Max=1, Rounding=2 })
+SV_VigBox:SetupDependencies({ { Toggles.SV_VigOn, true } })
+
+RunService.RenderStepped:Connect(function()
+    svApply()
+end)
+
+Options.SV_PresetSelect:OnChanged(function(v)
+    svApplyPreset(v)
+end)
+
+svApply()
+
 -- ── Movement ──────────────────────────────────────────────────────
 local ML = Tabs.Movement:AddLeftGroupbox('Player')
 ML:AddToggle('SpeedOn',  { Text='Speed Modifier', Default=false, Callback=function(v) speedEnabled=v; applySpeed() end })
@@ -1781,3 +2090,15 @@ SaveManager:SetFolder('TeddyHub/Config')
 SaveManager:BuildConfigSection(Tabs.Settings)
 ThemeManager:ApplyToTab(Tabs.Settings)
 SaveManager:LoadAutoloadConfig()
+
+Library:OnUnload(function()
+    SV_Atmosphere:Destroy()
+    SV_CC:Destroy()
+    svVigGui:Destroy()
+    Lighting.ExposureCompensation = SV_Original.Exposure
+    Lighting.FogStart = SV_Original.FogStart
+    Lighting.FogEnd   = SV_Original.FogEnd
+    Lighting.FogColor = SV_Original.FogColor
+    local cam = workspace.CurrentCamera
+    if cam then cam.FieldOfView = SV_Original.Fov end
+end)
