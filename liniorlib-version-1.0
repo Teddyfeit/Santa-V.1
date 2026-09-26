@@ -1,0 +1,1783 @@
+local getinfo = getinfo or debug.getinfo
+local DEBUG = false
+local Hooked = {}
+
+local Detected, Kill
+
+setthreadidentity(2)
+
+for i, v in getgc(true) do
+    if typeof(v) == "table" then
+        local DetectFunc = rawget(v, "Detected")
+        local KillFunc = rawget(v, "Kill")
+    
+        if typeof(DetectFunc) == "function" and not Detected then
+            Detected = DetectFunc
+            
+            local Old; Old = hookfunction(Detected, function(Action, Info, NoCrash)
+                if Action ~= "_" then
+                    if DEBUG then
+                        warn(`Adonis AntiCheat flagged\nMethod: {Action}\nInfo: {Info}`)
+                    end
+                end
+                
+                return true
+            end)
+
+            table.insert(Hooked, Detected)
+        end
+
+        if rawget(v, "Variables") and rawget(v, "Process") and typeof(KillFunc) == "function" and not Kill then
+            Kill = KillFunc
+            local Old; Old = hookfunction(Kill, function(Info)
+                if DEBUG then
+                    warn(`Adonis AntiCheat tried to kill (fallback): {Info}`)
+                end
+            end)
+
+            table.insert(Hooked, Kill)
+        end
+    end
+end
+
+local Old; Old = hookfunction(getrenv().debug.info, newcclosure(function(...)
+    local LevelOrFunc, Info = ...
+
+    if Detected and LevelOrFunc == Detected then
+        if DEBUG then
+            warn(`Adonis AntiCheat sanity check detected and broken`)
+        end
+
+        return coroutine.yield(coroutine.running())
+    end
+    
+    return Old(...)
+end))
+
+setthreadidentity(7)
+
+-- ── TeddyHub.lua ───────────────────────────────────
+local repo         = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+local Library      = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
+local SaveManager  = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+
+-- ── Services ─────────────────────────────────────────────────────
+local Players             = game:GetService('Players')
+local RunService          = game:GetService('RunService')
+local UserInputService    = game:GetService('UserInputService')
+local VirtualInputManager = game:GetService('VirtualInputManager')
+local Lighting            = game:GetService('Lighting')
+local CoreGui             = game:GetService("CoreGui")
+local Stats               = game:GetService("Stats")
+local LocalPlayer         = Players.LocalPlayer
+local Camera              = workspace.CurrentCamera
+local Mouse               = LocalPlayer:GetMouse()
+
+-- ── Watermark Settings ───────────────────────────────────────────
+local WM_Config = {
+    Enabled  = true,
+    Text     = "Santa V.1",
+    ShowFPS  = true,
+    ShowPing = true,
+    ShowTime = true
+}
+
+-- ── Target HUD Frame (CoreGui) ────────────────────────────────────
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TargetHUD_Gui"
+ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
+local TargetFrame = Instance.new("Frame")
+TargetFrame.Name = "TargetHUD"
+TargetFrame.Size = UDim2.new(0, 220, 0, 70)
+TargetFrame.Position = UDim2.new(0.5, -110, 0.75, 0)
+TargetFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+TargetFrame.BorderSizePixel = 0
+TargetFrame.Visible = false
+TargetFrame.Parent = ScreenGui
+
+local TargetCorner = Instance.new("UICorner")
+TargetCorner.CornerRadius = UDim.new(0, 8)
+TargetCorner.Parent = TargetFrame
+
+local AvatarImage = Instance.new("ImageLabel")
+AvatarImage.Size = UDim2.new(0, 50, 0, 50)
+AvatarImage.Position = UDim2.new(0, 10, 0, 10)
+AvatarImage.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+AvatarImage.BorderSizePixel = 0
+AvatarImage.Parent = TargetFrame
+
+local AvatarCorner = Instance.new("UICorner")
+AvatarCorner.CornerRadius = UDim.new(0, 6)
+AvatarCorner.Parent = AvatarImage
+
+local NameLabel = Instance.new("TextLabel")
+NameLabel.Size = UDim2.new(0, 140, 0, 20)
+NameLabel.Position = UDim2.new(0, 68, 0, 10)
+NameLabel.Text = "Target Name"
+NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+NameLabel.Font = Enum.Font.SourceSansBold
+NameLabel.TextSize = 16
+NameLabel.Parent = TargetFrame
+
+local HealthLabel = Instance.new("TextLabel")
+HealthLabel.Size = UDim2.new(0, 140, 0, 15)
+HealthLabel.Position = UDim2.new(0, 68, 0, 28)
+HealthLabel.Text = "100 / 100 HP"
+HealthLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+HealthLabel.TextXAlignment = Enum.TextXAlignment.Left
+HealthLabel.Font = Enum.Font.SourceSans
+HealthLabel.TextSize = 13
+HealthLabel.Parent = TargetFrame
+
+local HealthBarBG = Instance.new("Frame")
+HealthBarBG.Size = UDim2.new(0, 140, 0, 8)
+HealthBarBG.Position = UDim2.new(0, 68, 0, 48)
+HealthBarBG.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+HealthBarBG.BorderSizePixel = 0
+HealthBarBG.Parent = TargetFrame
+
+local BarBGCorner = Instance.new("UICorner")
+BarBGCorner.CornerRadius = UDim.new(0, 4)
+BarBGCorner.Parent = HealthBarBG
+
+local HealthBarFill = Instance.new("Frame")
+HealthBarFill.Size = UDim2.new(1, 0, 1, 0)
+HealthBarFill.BackgroundColor3 = Color3.fromRGB(0, 255, 120)
+HealthBarFill.BorderSizePixel = 0
+HealthBarFill.Parent = HealthBarBG
+
+local BarFillCorner = Instance.new("UICorner")
+BarFillCorner.CornerRadius = UDim.new(0, 4)
+BarFillCorner.Parent = HealthBarFill
+
+local targetHudEnabled = false
+
+local function updateTargetHUD(targetPlayer)
+    if not targetHudEnabled or not targetPlayer or not targetPlayer.Character then
+        TargetFrame.Visible = false
+        return
+    end
+
+    local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
+        TargetFrame.Visible = false
+        return
+    end
+
+    TargetFrame.Visible = true
+    NameLabel.Text = targetPlayer.DisplayName or targetPlayer.Name
+    AvatarImage.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. targetPlayer.UserId .. "&width=150&height=150&format=png"
+
+    local health = math.floor(humanoid.Health)
+    local maxHealth = math.floor(humanoid.MaxHealth)
+    local healthPercent = math.clamp(health / maxHealth, 0, 1)
+
+    HealthLabel.Text = health .. " / " .. maxHealth .. " HP"
+    HealthBarFill.Size = UDim2.new(healthPercent, 0, 1, 0)
+
+    if healthPercent > 0.5 then
+        HealthBarFill.BackgroundColor3 = Color3.fromRGB(0, 255, 120)
+    elseif healthPercent > 0.25 then
+        HealthBarFill.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+    else
+        HealthBarFill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    end
+end
+
+-- ── Crosshair Variables Forward-Declaration ──────────────────────
+local currentCHPosition = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+-- ── Aimbot ────────────────────────────────────────────────────────
+local hue                = 0
+local rainbowFov         = false
+local rainbowSpeed       = 0.005
+local aimFov             = 100
+local aiming             = false
+local predictionStr      = 0.065
+local smoothing          = 0.05
+local aimbotEnabled      = false
+local wallCheck          = true
+local stickyAim          = false
+local teamCheck          = false
+local healthCheck        = false
+local minHealth          = 0
+local circleColor        = Color3.fromRGB(255, 192, 253)
+local targetedColor      = Color3.fromRGB(250, 139, 255)
+local currentTarget      = nil
+local linkFovToCrosshair = false
+
+local fovCircle = Drawing.new('Circle')
+fovCircle.Thickness = 2
+fovCircle.Radius    = aimFov
+fovCircle.Filled    = false
+fovCircle.Color     = circleColor
+fovCircle.Visible   = false
+
+local function isTeammate(p)
+    return teamCheck and p.Team == LocalPlayer.Team
+end
+
+local function wallBlocked(char)
+    local head = char:FindFirstChild('Head')
+    if not head then return true end
+    local origin = Camera.CFrame.Position
+    local dir    = (head.Position - origin).Unit * (head.Position - origin).Magnitude
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = { LocalPlayer.Character, char }
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local result = workspace:Raycast(origin, dir, params)
+    return result ~= nil
+end
+
+local function getAimbotTarget()
+    local best, bestCursor, bestDist = nil, aimFov, math.huge
+    local camPos = Camera.CFrame.Position
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer or not p.Character then continue end
+        local head = p.Character:FindFirstChild('Head')
+        local hum  = p.Character:FindFirstChildOfClass('Humanoid')
+        if not head or not hum then continue end
+        if isTeammate(p) then continue end
+        if healthCheck and hum.Health < minHealth then continue end
+        local sp = Camera:WorldToViewportPoint(head.Position)
+        if sp.Z <= 0 then continue end
+        local screenPos  = Vector2.new(sp.X, sp.Y)
+        local cursorDist = (screenPos - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+        local playerDist = (head.Position - camPos).Magnitude
+        if cursorDist < bestCursor and (not wallCheck or not wallBlocked(p.Character)) then
+            if playerDist < bestDist then
+                bestDist = playerDist; bestCursor = cursorDist; best = p
+            end
+        end
+    end
+    return best
+end
+
+local function aimAt(p)
+    local head = p.Character and p.Character:FindFirstChild('Head')
+    local hrp  = p.Character and p.Character:FindFirstChild('HumanoidRootPart')
+    if not head or not hrp then return end
+    local predicted = head.Position + hrp.Velocity * predictionStr
+    local target    = CFrame.new(Camera.CFrame.Position, predicted)
+    Camera.CFrame   = Camera.CFrame:Lerp(target, smoothing)
+end
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        if linkFovToCrosshair and currentCHPosition then
+            fovCircle.Position = currentCHPosition
+        else
+            fovCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 50)
+        end
+
+        if rainbowFov then
+            hue = (hue + rainbowSpeed) % 1
+            fovCircle.Color = Color3.fromHSV(hue, 1, 1)
+        else
+            fovCircle.Color = (aiming and currentTarget) and targetedColor or circleColor
+        end
+        if aiming then
+            if stickyAim and currentTarget then
+                local sp = Camera:WorldToViewportPoint(currentTarget.Character.Head.Position)
+                local d  = (Vector2.new(sp.X, sp.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
+                if d > aimFov or (wallCheck and wallBlocked(currentTarget.Character)) or isTeammate(currentTarget) then
+                    currentTarget = nil
+                end
+            end
+            if not stickyAim or not currentTarget then currentTarget = getAimbotTarget() end
+            if currentTarget then aimAt(currentTarget) end
+        else
+            currentTarget = nil
+        end
+    end
+
+    updateTargetHUD(currentTarget)
+end)
+
+Mouse.Button2Down:Connect(function() if aimbotEnabled then aiming = true  end end)
+Mouse.Button2Up:Connect(function()   if aimbotEnabled then aiming = false end end)
+
+-- ── Triggerbot ────────────────────────────────────────────────────
+local trigger = { enabled=false, teamCheck=false, delay=0, holdMode=false, clickInterval=0.05 }
+local lastClick = 0
+
+local function getTriggerTarget()
+    local t = Mouse.Target
+    if not t or not t.Parent then return nil end
+    local char = t.Parent
+    if not char:FindFirstChild('Humanoid') then return nil end
+    local p = Players:GetPlayerFromCharacter(char)
+    if not p or p == LocalPlayer then return nil end
+    if trigger.teamCheck and p.Team == LocalPlayer.Team then return nil end
+    return p
+end
+
+RunService.RenderStepped:Connect(function()
+    if not trigger.enabled then return end
+    local can = not trigger.holdMode or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    if can and getTriggerTarget() and (tick() - lastClick) >= (trigger.delay + trigger.clickInterval) then
+        lastClick = tick()
+        if mouse1click then
+            mouse1click()
+        else
+            VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, true, game, 0)
+            VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, false, game, 0)
+        end
+    end
+end)
+
+-- ── SpinBot & Anti-Aim System ───────────────────────────────────
+local spinEnabled = false
+local spinSpeed = 10
+
+local antiAim = {
+    enabled = false,
+    velocityDesync = false,
+    veloX = 0, veloY = 1000, veloZ = 0,
+    jitter = false,
+    jitterRange = 5,
+    pitch = 0,
+    yaw = 0,
+    roll = 0
+}
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild('HumanoidRootPart')
+    local hum = char and char:FindFirstChildOfClass('Humanoid')
+
+    if hum and (spinEnabled or antiAim.enabled) then
+        hum.AutoRotate = false
+    elseif hum and not spinEnabled and not antiAim.enabled then
+        hum.AutoRotate = true
+    end
+
+    if spinEnabled and root then
+        root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(spinSpeed), 0)
+    end
+    
+    if antiAim.enabled and root then
+        local angleCFrame = CFrame.Angles(math.rad(antiAim.pitch), math.rad(antiAim.yaw), math.rad(antiAim.roll))
+        root.CFrame = root.CFrame * angleCFrame
+        
+        if antiAim.jitter then
+            local offset = Vector3.new(
+                (math.random() - 0.5) * antiAim.jitterRange,
+                0,
+                (math.random() - 0.5) * antiAim.jitterRange
+            )
+            root.CFrame = root.CFrame + offset
+        end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if antiAim.enabled and antiAim.velocityDesync then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild('HumanoidRootPart')
+        if root then
+            local oldVelo = root.Velocity
+            root.Velocity = Vector3.new(antiAim.veloX, antiAim.veloY, antiAim.veloZ)
+            RunService.RenderStepped:Wait()
+            root.Velocity = oldVelo
+        end
+    end
+end)
+
+-- ── ESP Engine ───────────────────────────────────────────────────
+local ESPToggles = {
+    master=false, box=true, fill=false, name=true,
+    distance=true, weapon=false, healthbar=true,
+    skeleton=false, skeletonOutline=false,
+}
+local ESPOptions = {
+    boundsType='static', boundsScale=100,
+    color=Color3.fromRGB(0, 255, 140),
+}
+
+local SKEL_PARTS = {
+    'RightHand','LeftLowerArm','RightLowerArm','LeftUpperArm','RightUpperArm',
+    'LowerTorso','LeftLowerLeg','LeftUpperLeg','LeftFoot','RightFoot',
+    'RightLowerLeg','RightUpperLeg','UpperTorso','LeftHand','Head',
+}
+local SKEL_LINES = {
+    {'LeftUpperArm','UpperTorso'},   {'LeftLowerArm','LeftUpperArm'},
+    {'LeftLowerArm','LeftHand'},     {'RightUpperArm','UpperTorso'},
+    {'RightLowerArm','RightUpperArm'},{'RightHand','RightLowerArm'},
+    {'LeftUpperLeg','LowerTorso'},   {'LeftLowerLeg','LeftUpperLeg'},
+    {'LeftFoot','LeftLowerLeg'},     {'RightUpperLeg','LowerTorso'},
+    {'RightLowerLeg','RightUpperLeg'},{'RightFoot','RightLowerLeg'},
+    {'LowerTorso','UpperTorso'},
+}
+
+local ESP = {}; ESP.__index = ESP
+function ESP.new() return setmetatable({ players={} }, ESP) end
+
+function ESP:createState(player)
+    local s = { player=player, character=nil, humanoid=nil, humanoidRootPart=nil,
+                parts={}, connections={}, drawings={}, squares={}, lines={}, text={} }
+    for i=1,26 do
+        local l=Drawing.new('Line'); l.Visible=false; l.Thickness=1; l.Color=Color3.new(1,1,1)
+        table.insert(s.drawings,l); table.insert(s.lines,l)
+    end
+    for i=1,4 do
+        local t=Drawing.new('Text'); t.Outline=true; t.Visible=false
+        t.Color=Color3.new(1,1,1); t.Center=true; t.Size=13
+        table.insert(s.drawings,t); table.insert(s.text,t)
+    end
+    for i=1,4 do
+        local sq=Drawing.new('Square'); sq.Visible=false; sq.Outline=false
+        table.insert(s.drawings,sq); table.insert(s.squares,sq)
+    end
+    s.squares[1].Thickness=1; s.squares[1].Color=Color3.new(0,0,0)
+    s.squares[2].Thickness=1; s.squares[3].Filled=true
+    s.squares[4].Filled=true; s.squares[4].Color=Color3.new(0,0,0)
+    return s
+end
+
+function ESP:updateState(player, char)
+    local s = self.players[player]; if not s then return end
+    s.character=char
+    s.humanoidRootPart=char:WaitForChild('HumanoidRootPart',5)
+    s.humanoid=char:WaitForChild('Humanoid',5)
+    s.parts={}
+    if not s.humanoid or not s.humanoidRootPart then return end
+    for _,n in ipairs(SKEL_PARTS) do
+        local p=char:FindFirstChild(n); if p then s.parts[n]=p end
+    end
+end
+
+function ESP:bounds(s)
+    local hrp=s.humanoidRootPart; if not hrp then return nil end
+    local top,ton=Camera:WorldToViewportPoint((hrp.CFrame*CFrame.new(0,3,0)).Position)
+    local bot,bon=Camera:WorldToViewportPoint((hrp.CFrame*CFrame.new(0,-3.5,0)).Position)
+    if not ton and not bon then return nil end
+    local h=math.abs(top.Y-bot.Y)
+    local w=h*0.6*(ESPOptions.boundsScale/100)
+    return w,h,Vector2.new(top.X,top.Y)
+end
+
+function ESP:drawSkeleton(s)
+    for _,l in ipairs(s.lines) do l.Visible=false end
+    if not ESPToggles.skeleton or not s.character then return end
+    for i,pair in ipairs(SKEL_LINES) do
+        local fP=s.parts[pair[1]]; local tP=s.parts[pair[2]]
+        if not fP or not tP then continue end
+        local f,onF=Camera:WorldToViewportPoint(fP.Position)
+        local t,onT=Camera:WorldToViewportPoint(tP.Position)
+        if not onF or not onT then continue end
+        local l=s.lines[i]; l.From=Vector2.new(f.X,f.Y); l.To=Vector2.new(t.X,t.Y)
+        l.Color=ESPOptions.color; l.Thickness=ESPToggles.skeletonOutline and 2 or 1; l.Visible=true
+    end
+end
+
+function ESP:drawBox(s,w,h,pos)
+    s.squares[1].Visible=false; s.squares[2].Visible=false
+    if not ESPToggles.box then return end
+    local sz=Vector2.new(w,h); local p=pos-Vector2.new(w/2,0)
+    s.squares[2].Size=sz; s.squares[2].Position=p
+    s.squares[2].Color=ESPOptions.color; s.squares[2].Filled=ESPToggles.fill; s.squares[2].Visible=true
+end
+
+function ESP:drawText(s,w,h,pos)
+    for _,t in ipairs(s.text) do t.Visible=false end
+    local topPos=pos-Vector2.new(0,15); local botPos=pos+Vector2.new(0,h+2)
+    if ESPToggles.name then
+        s.text[1].Text=s.player.Name; s.text[1].Position=topPos
+        s.text[1].Color=ESPOptions.color; s.text[1].Visible=true
+    end
+    if ESPToggles.weapon then
+        local item=s.character and (s.character:FindFirstChildOfClass('Tool') or s.character:FindFirstChild('EquippedItem'))
+        s.text[2].Text=item and item.Name or 'None'; s.text[2].Position=botPos
+        s.text[2].Color=ESPOptions.color; s.text[2].Visible=true; botPos=botPos+Vector2.new(0,14)
+    end
+    if ESPToggles.distance and s.humanoidRootPart then
+        local d=math.round((s.humanoidRootPart.Position-Camera.CFrame.Position).Magnitude)
+        s.text[3].Text='['..d..'m]'; s.text[3].Position=botPos
+        s.text[3].Color=ESPOptions.color; s.text[3].Visible=true
+    end
+end
+
+function ESP:drawHealthbar(s,w,h,pos)
+    s.squares[3].Visible=false; s.squares[4].Visible=false
+    if not ESPToggles.healthbar or not s.humanoid then return end
+    local ratio=math.clamp(s.humanoid.Health/s.humanoid.MaxHealth,0,1)
+    local barH=h*ratio
+    local barPos=pos-Vector2.new(w/2+6,-h+barH)
+    local bgPos=pos-Vector2.new(w/2+6,0)
+    s.squares[4].Size=Vector2.new(3,h); s.squares[4].Position=bgPos; s.squares[4].Visible=true
+    s.squares[3].Size=Vector2.new(3,barH); s.squares[3].Position=barPos
+    s.squares[3].Color=Color3.fromRGB(255,0,0):Lerp(Color3.fromRGB(0,255,0),ratio); s.squares[3].Visible=true
+end
+
+function ESP:hideAll(s) for _,d in ipairs(s.drawings) do d.Visible=false end end
+
+function ESP:update(player)
+    local s=self.players[player]; if not s then return end
+    if not ESPToggles.master then self:hideAll(s) return end
+    local char=s.character
+    if not char or not s.humanoidRootPart or not s.humanoid or s.humanoid.Health<=0 then self:hideAll(s) return end
+    if player==LocalPlayer then self:hideAll(s) return end
+    local w,h,pos=self:bounds(s); if not w then self:hideAll(s) return end
+    self:drawSkeleton(s); self:drawBox(s,w,h,pos); self:drawText(s,w,h,pos); self:drawHealthbar(s,w,h,pos)
+end
+
+function ESP:start()
+    local function onAdded(player)
+        local s=self:createState(player); self.players[player]=s
+        local function onChar(char) task.spawn(function() self:updateState(player,char) end) end
+        table.insert(s.connections, player.CharacterAdded:Connect(onChar))
+        table.insert(s.connections, player.CharacterRemoving:Connect(function() self:hideAll(s); s.character=nil end))
+        if player.Character then onChar(player.Character) end
+    end
+    for _,p in ipairs(Players:GetPlayers()) do onAdded(p) end
+    Players.PlayerAdded:Connect(onAdded)
+    Players.PlayerRemoving:Connect(function(player)
+        local s=self.players[player]; if not s then return end
+        for _,c in ipairs(s.connections) do pcall(c.Disconnect,c) end
+        for _,d in ipairs(s.drawings)    do pcall(d.Remove,d)     end
+        self.players[player]=nil
+    end)
+    RunService.RenderStepped:Connect(function() for p in pairs(self.players) do self:update(p) end end)
+end
+
+local ESPEngine = ESP.new(); ESPEngine:start()
+
+-- ── Crosshair ─────────────────────────────────────────────────────
+local CH = {
+    Visible=false, SpinSpeed=0.005, CentralGap=8, TotalLength=112,
+    LineThickness=2, OutlineThickness=4,
+    ColorStart=Color3.fromRGB(180,180,180), ColorEnd=Color3.fromRGB(20,20,20),
+    CircleVisible=true, CircleRadius=119, CircleTransparency=0.3,
+    CircleColor=Color3.fromRGB(15,15,25),
+    TrackingEnabled=false, TrackingRadius=150, TrackingSmoothness=0.2, TrackPart='Head', TeamCheck=true,
+}
+
+local SEG = 2
+local chLines, chOutlines, chCircle = {}, {}, nil
+
+local function clearCH()
+    if chCircle then chCircle:Remove(); chCircle=nil end
+    for arm=1,#chLines do
+        if chLines[arm] then
+            for seg=1,#chLines[arm] do
+                if chLines[arm][seg]    then chLines[arm][seg]:Remove()    end
+                if chOutlines[arm][seg] then chOutlines[arm][seg]:Remove() end
+            end
+        end
+    end
+    chLines, chOutlines = {}, {}
+end
+
+local function initCH()
+    clearCH()
+    chCircle = Drawing.new('Circle')
+    chCircle.Filled=true; chCircle.NumSides=64; chCircle.Radius=CH.CircleRadius
+    chCircle.Color=CH.CircleColor; chCircle.Transparency=CH.CircleTransparency
+    chCircle.Visible=CH.Visible and CH.CircleVisible
+    local segs=math.max(1,math.floor(CH.TotalLength/SEG))
+    for arm=1,4 do
+        chLines[arm], chOutlines[arm] = {}, {}
+        for seg=1,segs do
+            local p=(seg-0.5)/segs
+            local ol=Drawing.new('Line'); ol.Thickness=CH.OutlineThickness; ol.Color=Color3.new(0,0,0); ol.Visible=CH.Visible
+            local ml=Drawing.new('Line'); ml.Thickness=CH.LineThickness; ml.Color=CH.ColorStart:Lerp(CH.ColorEnd,p); ml.Visible=CH.Visible
+            chOutlines[arm][seg]=ol; chLines[arm][seg]=ml
+        end
+    end
+end
+
+local function getCHTarget(center)
+    local best,bestD=nil,CH.TrackingRadius
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==LocalPlayer or not p.Character then continue end
+        local part=p.Character:FindFirstChild(CH.TrackPart)
+        local hum=p.Character:FindFirstChildOfClass('Humanoid')
+        if not part or not hum or hum.Health<=0 then continue end
+        if CH.TeamCheck and p.Team==LocalPlayer.Team then continue end
+        local sp,on=Camera:WorldToViewportPoint(part.Position)
+        if on then
+            local d=(Vector2.new(sp.X,sp.Y)-center).Magnitude
+            if d<bestD then bestD=d; best=Vector2.new(sp.X,sp.Y) end
+        end
+    end
+    return best
+end
+
+local BASE={0,math.pi/2,math.pi,math.pi*1.5}
+local chAngle=0
+
+RunService.RenderStepped:Connect(function()
+    local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    local targetPos = screenCenter
+
+    if CH.TrackingEnabled then 
+        local t = getCHTarget(screenCenter)
+        if t then targetPos = t end 
+    end
+
+    currentCHPosition = currentCHPosition:Lerp(targetPos, CH.TrackingSmoothness)
+
+    if chCircle then
+        chCircle.Position=currentCHPosition; chCircle.Radius=CH.CircleRadius
+        chCircle.Color=CH.CircleColor; chCircle.Transparency=CH.CircleTransparency
+        chCircle.Visible=CH.Visible and CH.CircleVisible
+    end
+    chAngle=chAngle+CH.SpinSpeed
+    local segs=math.max(1,math.floor(CH.TotalLength/SEG))
+    for arm=1,4 do
+        local angle=BASE[arm]+chAngle
+        local cos,sin=math.cos(angle),math.sin(angle)
+        local AL,AO=chLines[arm],chOutlines[arm]
+        if AL then
+            for seg=1,#AL do
+                local ml,ol=AL[seg],AO[seg]
+                if ml and ol then
+                    if CH.Visible then
+                        local s1=CH.CentralGap+(seg-1)*SEG; local s2=CH.CentralGap+seg*SEG
+                        local sP=currentCHPosition+Vector2.new(cos*s1,sin*s1)
+                        local eP=currentCHPosition+Vector2.new(cos*s2,sin*s2)
+                        ol.From=sP; ol.To=eP; ol.Thickness=CH.OutlineThickness; ol.Visible=true
+                        ml.From=sP; ml.To=eP; ml.Thickness=CH.LineThickness
+                        ml.Color=CH.ColorStart:Lerp(CH.ColorEnd,(seg-0.5)/segs); ml.Visible=true
+                    else ml.Visible=false; ol.Visible=false end
+                end
+            end
+        end
+    end
+end)
+
+initCH()
+
+-- ── Movement ──────────────────────────────────────────────────────
+local speedEnabled=false; local walkSpeed=16
+local jumpEnabled=false;  local jumpPower=50
+local flying=false;       local flySpeed=50
+local flyConn
+
+local function applySpeed()
+    local char=LocalPlayer.Character; if not char then return end
+    local hum=char:FindFirstChildOfClass('Humanoid'); if not hum then return end
+    hum.WalkSpeed=speedEnabled and walkSpeed or 16
+end
+
+local function applyJump()
+    local char=LocalPlayer.Character; if not char then return end
+    local hum=char:FindFirstChildOfClass('Humanoid'); if not hum then return end
+    hum.UseJumpPower=true; hum.JumpPower=jumpEnabled and jumpPower or 50
+end
+
+local function toggleFly(on)
+    flying=on
+    local char=LocalPlayer.Character; if not char then return end
+    local root=char:FindFirstChild('HumanoidRootPart'); if not root then return end
+    if flying then
+        flyConn=RunService.RenderStepped:Connect(function()
+            local dir=Vector3.new(0,0,0); local cam=workspace.CurrentCamera
+            if UserInputService:IsKeyDown(Enum.KeyCode.W)           then dir=dir+cam.CFrame.LookVector  end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S)           then dir=dir-cam.CFrame.LookVector  end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A)           then dir=dir-cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D)           then dir=dir+cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space)       then dir=dir+Vector3.new(0,1,0)     end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir=dir-Vector3.new(0,1,0)     end
+            root.Velocity=dir*flySpeed; root.RotVelocity=Vector3.new(0,0,0)
+        end)
+    else
+        if flyConn then flyConn:Disconnect() end
+        root.Velocity=Vector3.new(0,0,0)
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if speedEnabled then applySpeed() end
+    if jumpEnabled  then applyJump()  end
+end)
+
+-- ── Multi-Weather System (Rain & Snow) ────────────────────────────
+local weatherEnabled = false
+local selectedWeather = 'Rain'
+local weatherIntensity = 31
+local weatherColor = Color3.fromRGB(200, 220, 255)
+
+local weatherFolder = workspace:FindFirstChild("CustomWeatherFolder") or Instance.new("Folder")
+weatherFolder.Name = "CustomWeatherFolder"
+weatherFolder.Parent = workspace
+
+local weatherParticles = {}
+local maxParticles = 120
+
+for i = 1, maxParticles do
+    local p = Instance.new("Part")
+    p.Name = "WeatherParticle"
+    p.Material = Enum.Material.SmoothPlastic
+    p.Transparency = 0.4
+    p.CanCollide = false
+    p.Anchored = true
+    p.CastShadow = false
+    p.Parent = weatherFolder
+    table.insert(weatherParticles, {Part = p, Active = false, Speed = 0, Drift = 0})
+end
+
+RunService.RenderStepped:Connect(function()
+    if not weatherEnabled then
+        for _, d in ipairs(weatherParticles) do
+            if d.Active then
+                d.Active = false
+                d.Part.CFrame = CFrame.new(0, -1000, 0)
+            end
+        end
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local activeLimit = math.clamp(math.floor((weatherIntensity / 100) * maxParticles), 5, maxParticles)
+    local center = hrp.Position
+
+    for i = 1, maxParticles do
+        local d = weatherParticles[i]
+        if i <= activeLimit then
+            if not d.Active or d.Part.Position.Y < (center.Y - 10) then
+                local rx = math.random(-60, 60)
+                local rz = math.random(-60, 60)
+                local ry = math.random(20, 50)
+                d.Part.CFrame = CFrame.new(center + Vector3.new(rx, ry, rz))
+                d.Active = true
+
+                if selectedWeather == 'Snow' then
+                    d.Part.Size = Vector3.new(0.4, 0.4, 0.4)
+                    d.Part.Shape = Enum.PartType.Ball
+                    d.Speed = math.random(10, 25)
+                    d.Drift = math.random(-5, 5) / 10
+                else
+                    d.Part.Size = Vector3.new(0.08, 2.5, 0.08)
+                    d.Part.Shape = Enum.PartType.Block
+                    d.Speed = math.random(80, 120)
+                    d.Drift = 0
+                end
+            else
+                d.Part.CFrame = d.Part.CFrame - Vector3.new(d.Drift, d.Speed * (1/60), 0)
+                d.Part.Color = weatherColor
+            end
+        else
+            if d.Active then
+                d.Active = false
+                d.Part.CFrame = CFrame.new(0, -1000, 0)
+            end
+        end
+    end
+end)
+
+-- ── Working Self Chams & FOV System ──────────────────────────────
+local selfChamsEnabled = false
+local selfChamsStyle = 'Highlight'
+local selfChamsGradient = false
+local selfGradientSpeed = 5
+
+local selfFillColor = Color3.fromRGB(255, 255, 255)
+local selfOutlineColor = Color3.fromRGB(255, 255, 255)
+local selfFillTrans = 0.5
+local selfOutlineTrans = 0
+
+local fovEnabled = false
+local customFov = 90
+
+local selfHue = 0
+local savedState = {}
+local isChamsActive = false
+
+local function saveCharacterState(char)
+    savedState = { Parts = {}, Clothing = {}, Textures = {} }
+    for _, item in ipairs(char:GetDescendants()) do
+        if item:IsA("BasePart") then
+            savedState.Parts[item] = {
+                Material = item.Material,
+                Color = item.Color,
+                Transparency = item.Transparency
+            }
+        elseif item:IsA("Clothing") or item:IsA("ShirtGraphic") then
+            savedState.Clothing[item] = item.Parent
+        elseif item:IsA("Decal") or item:IsA("Texture") then
+            savedState.Textures[item] = item.Transparency
+        end
+    end
+end
+
+local function restoreCharacterState(char)
+    if not isChamsActive then return end
+    isChamsActive = false
+
+    local highlight = char:FindFirstChild("SelfHighlight")
+    if highlight then highlight:Destroy() end
+
+    for part, data in pairs(savedState.Parts or {}) do
+        if part and part.Parent then
+            part.Material = data.Material
+            part.Color = data.Color
+            part.Transparency = data.Transparency
+        end
+    end
+
+    for item, parent in pairs(savedState.Clothing or {}) do
+        if item then item.Parent = parent end
+    end
+
+    for decal, trans in pairs(savedState.Textures or {}) do
+        if decal and decal.Parent then decal.Transparency = trans end
+    end
+
+    savedState = {}
+end
+
+local function applySelfChams()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    if not selfChamsEnabled then
+        restoreCharacterState(char)
+        return
+    end
+
+    if not isChamsActive then
+        saveCharacterState(char)
+        isChamsActive = true
+    end
+
+    local activeColor = selfFillColor
+    if selfChamsGradient then
+        activeColor = Color3.fromHSV(selfHue, 1, 1)
+    end
+
+    if selfChamsStyle == 'Highlight' then
+        for item, parent in pairs(savedState.Clothing) do if item then item.Parent = parent end end
+        for decal, trans in pairs(savedState.Textures) do if decal then decal.Transparency = trans end end
+        for part, data in pairs(savedState.Parts) do
+            if part then
+                part.Material = data.Material
+                part.Color = data.Color
+                part.Transparency = data.Transparency
+            end
+        end
+
+        local highlight = char:FindFirstChild("SelfHighlight") or Instance.new("Highlight")
+        highlight.Name = "SelfHighlight"
+        highlight.Adornee = char
+        highlight.Enabled = true
+        highlight.FillColor = activeColor
+        highlight.OutlineColor = selfChamsGradient and activeColor or selfOutlineColor
+        highlight.FillTransparency = selfFillTrans
+        highlight.OutlineTransparency = selfOutlineTrans
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = char
+
+    elseif selfChamsStyle == 'ForceField' or selfChamsStyle == 'Solid Color' then
+        local highlight = char:FindFirstChild("SelfHighlight")
+        if highlight then highlight:Destroy() end
+
+        for item in pairs(savedState.Clothing) do if item then item.Parent = nil end end
+        for decal in pairs(savedState.Textures) do if decal then decal.Transparency = 1 end end
+
+        local targetMaterial = (selfChamsStyle == 'ForceField') and Enum.Material.ForceField or Enum.Material.SmoothPlastic
+
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.Material = targetMaterial
+                part.Color = activeColor
+                part.Transparency = selfFillTrans
+            elseif part:IsA("Accessory") then
+                local handle = part:FindFirstChild("Handle")
+                if handle and handle:IsA("BasePart") then
+                    handle.Material = targetMaterial
+                    handle.Color = activeColor
+                    handle.Transparency = selfFillTrans
+                end
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    if selfChamsGradient then
+        selfHue = (selfHue + (deltaTime * selfGradientSpeed * 0.2)) % 1
+    end
+
+    applySelfChams()
+
+    if fovEnabled then
+        workspace.CurrentCamera.FieldOfView = customFov
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    isChamsActive = false
+    savedState = {}
+end)
+
+-- ── Fixed ColorCorrection & Bloom System ──────────────────────────
+local ccEffect = Lighting:FindFirstChild("CustomColorCorrection") or Instance.new("ColorCorrectionEffect")
+ccEffect.Name = "CustomColorCorrection"
+ccEffect.Parent = Lighting
+
+local bloomEffect = Lighting:FindFirstChild("CustomBloom") or Instance.new("BloomEffect")
+bloomEffect.Name = "CustomBloom"
+bloomEffect.Parent = Lighting
+
+local ccEnabled = false
+local bloomEnabled = false
+
+local function updateColorCorrection(brightness, contrast, saturation, tintColor)
+    ccEffect.Enabled = ccEnabled
+    if ccEnabled then
+        ccEffect.Brightness = brightness
+        ccEffect.Contrast = contrast
+        ccEffect.Saturation = saturation
+        ccEffect.TintColor = tintColor
+    end
+end
+
+local function updateBloom(intensity, size, threshold)
+    bloomEffect.Enabled = bloomEnabled
+    if bloomEnabled then
+        bloomEffect.Intensity = intensity
+        bloomEffect.Size = size
+        bloomEffect.Threshold = threshold
+    end
+end
+
+-- ── Custom Shiftlock Crosshairs System ────────────────────────────
+local ShiftLockSystem = {
+    Enabled = false,
+    CurrentID = "6031075931",
+    IconSize = 32
+}
+
+local ShiftPresets = {
+    ["Clean White Dot"]   = "6031075931",
+    ["Red Dot"]           = "6830874135",
+    ["Crosshair Small"]   = "138380362",
+    ["Crosshair Large"]   = "254508119",
+    ["Circle Scope"]      = "3523723128",
+    ["Purple Crosshair"]  = "6031075931",
+    ["Target Scope"]      = "5820712980"
+}
+
+local ShiftPresetNames = {}
+for name, _ in pairs(ShiftPresets) do
+    table.insert(ShiftPresetNames, name)
+end
+
+local CrosshairGui = Instance.new("ScreenGui")
+CrosshairGui.Name = "CustomShiftlockOverlay"
+CrosshairGui.ResetOnSpawn = false
+
+pcall(function() CrosshairGui.Parent = CoreGui end)
+if not CrosshairGui.Parent then
+    CrosshairGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local CrosshairImage = Instance.new("ImageLabel")
+CrosshairImage.Name = "CursorImage"
+CrosshairImage.AnchorPoint = Vector2.new(0.5, 0.5)
+CrosshairImage.BackgroundTransparency = 1
+CrosshairImage.Size = UDim2.new(0, 32, 0, 32)
+CrosshairImage.Visible = false
+CrosshairImage.Parent = CrosshairGui
+
+local function hideDefaultShiftlock(hide)
+    pcall(function()
+        local robloxGui = CoreGui:FindFirstChild("RobloxGui") or LocalPlayer.PlayerGui
+        for _, v in pairs(robloxGui:GetDescendants()) do
+            if v:IsA("ImageLabel") and (v.Name == "ShiftLockCursor" or v.Name == "MouseIcon") then
+                v.ImageTransparency = hide and 1 or 0
+            end
+        end
+    end)
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ShiftLockSystem.Enabled then
+        CrosshairImage.Visible = false
+        hideDefaultShiftlock(false)
+        return
+    end
+
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        hideDefaultShiftlock(true)
+        
+        local viewSize = workspace.CurrentCamera.ViewportSize
+        CrosshairImage.Position = UDim2.new(0, viewSize.X / 2, 0, viewSize.Y / 2)
+        
+        local cleanId = tostring(ShiftLockSystem.CurrentID):gsub("%D", "")
+        CrosshairImage.Image = "rbxassetid://" .. cleanId
+        CrosshairImage.Size = UDim2.new(0, ShiftLockSystem.IconSize, 0, ShiftLockSystem.IconSize)
+        CrosshairImage.Visible = true
+    else
+        CrosshairImage.Visible = false
+        hideDefaultShiftlock(false)
+    end
+end)
+
+-- ── Time Control System ───────────────────────────────────────────
+local TimeSystem = {
+    CurrentTime = 14,
+    FreezeTime = false
+}
+
+local function setGameTime(timeValue)
+    TimeSystem.CurrentTime = timeValue
+    Lighting.ClockTime = timeValue
+end
+
+RunService.RenderStepped:Connect(function()
+    if TimeSystem.FreezeTime then
+        Lighting.ClockTime = TimeSystem.CurrentTime
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+-- LINORIA GUI & INITIALIZATION
+-- ══════════════════════════════════════════════════════════════════
+local Window = Library:CreateWindow({
+    Title        = 'Santa V.1 Universal Script',
+    Center       = true,
+    AutoShow     = true,
+    TabPadding   = 8,
+    MenuFadeTime = 0.2,
+})
+
+local Tabs = {
+    Combat     = Window:AddTab('Combat'),
+    Visuals    = Window:AddTab('Visuals'),
+    Movement   = Window:AddTab('Movement'),
+    Crosshair  = Window:AddTab('Crosshair'),
+    Misc       = Window:AddTab('Misc'),
+    Settings   = Window:AddTab('UI Settings'),
+}
+
+-- ── Combat ────────────────────────────────────────────────────────
+local CL = Tabs.Combat:AddLeftGroupbox('Aimbot')
+local CR = Tabs.Combat:AddRightGroupbox('Colors')
+local AA = Tabs.Combat:AddRightGroupbox('Anti-Aim & Desync Doesn work at all')
+local TR = Tabs.Combat:AddRightGroupbox('Trigger Bot')
+
+CL:AddToggle('AimbotOn',  { Text='Aimbot',          Default=false, Callback=function(v) aimbotEnabled=v; fovCircle.Visible=v end })
+CL:AddToggle('LinkFovCH', { Text='Link FOV to Crosshair', Default=false, Callback=function(v) linkFovToCrosshair=v end })
+CL:AddSlider('Smooth',    { Text='Smoothing',        Default=5,   Min=0, Max=100, Rounding=0, Callback=function(v) smoothing=1-(v/100) end })
+CL:AddSlider('PredStr',   { Text='Prediction',       Default=65,  Min=0, Max=200, Rounding=0, Callback=function(v) predictionStr=v/1000 end })
+CL:AddSlider('FovSize',   { Text='FOV Radius',       Default=100, Min=0, Max=1000,Rounding=0, Callback=function(v) aimFov=v; fovCircle.Radius=v end })
+CL:AddToggle('WallChk',   { Text='Wall Check',       Default=true,  Callback=function(v) wallCheck=v end })
+CL:AddToggle('StickyOn',  { Text='Sticky Aim',       Default=false, Callback=function(v) stickyAim=v end })
+CL:AddToggle('TeamChk',   { Text='Team Check',       Default=false, Callback=function(v) teamCheck=v end })
+CL:AddToggle('HealthChk', { Text='Health Check',     Default=false, Callback=function(v) healthCheck=v end })
+CL:AddSlider('MinHp',     { Text='Min Health',       Default=0,   Min=0, Max=100, Rounding=0, Callback=function(v) minHealth=v end })
+CL:AddToggle('RainbowFov',{ Text='Rainbow FOV',      Default=false, Callback=function(v) rainbowFov=v end })
+
+CR:AddLabel('FOV Color'):AddColorPicker('FovCol', {
+    Default=circleColor,
+    Callback=function(v) circleColor=v; if not rainbowFov then fovCircle.Color=v end end
+})
+CR:AddLabel('Targeted Color'):AddColorPicker('TgtCol', {
+    Default=targetedColor,
+    Callback=function(v) targetedColor=v end
+})
+
+CR:AddToggle('TargetHUD_Enable', {
+    Text = 'Enable Target HUD',
+    Default = false,
+    Callback = function(Value)
+        targetHudEnabled = Value
+        if not Value then
+            TargetFrame.Visible = false
+        end
+    end
+})
+
+-- Anti Aim Controls
+AA:AddToggle('AA_Enable', { Text = 'Enable Anti-Aim', Default = false, Callback = function(v) antiAim.enabled = v end })
+AA:AddToggle('AA_VeloDesync', { Text = 'Velocity Desync', Default = false, Callback = function(v) antiAim.velocityDesync = v end })
+AA:AddSlider('AA_VeloY', { Text = 'Desync Y Offset', Default = 1000, Min = -5000, Max = 5000, Rounding = 0, Callback = function(v) antiAim.veloY = v end })
+AA:AddToggle('AA_Jitter', { Text = 'Jitter Anti-Aim', Default = false, Callback = function(v) antiAim.jitter = v end })
+AA:AddSlider('AA_JitterRange', { Text = 'Jitter Intensity', Default = 5, Min = 1, Max = 25, Rounding = 0, Callback = function(v) antiAim.jitterRange = v end })
+AA:AddSlider('AA_Pitch', { Text = 'Pitch Angle', Default = 0, Min = -180, Max = 180, Rounding = 0, Callback = function(v) antiAim.pitch = v end })
+AA:AddSlider('AA_Yaw', { Text = 'Yaw Angle', Default = 0, Min = -180, Max = 180, Rounding = 0, Callback = function(v) antiAim.yaw = v end })
+AA:AddSlider('AA_Roll', { Text = 'Roll Angle', Default = 0, Min = -180, Max = 180, Rounding = 0, Callback = function(v) antiAim.roll = v end })
+
+TR:AddToggle('TrigOn',    { Text='Enable',                   Default=false, Callback=function(v) trigger.enabled=v end })
+TR:AddToggle('TrigTeam',  { Text='Team Check',               Default=false, Callback=function(v) trigger.teamCheck=v end })
+TR:AddToggle('TrigHold',  { Text='Hold Mode (Right Click)',   Default=false, Callback=function(v) trigger.holdMode=v end })
+TR:AddSlider('TrigDelay', { Text='Reaction Delay (x0.01s)',  Default=0,  Min=0, Max=100, Rounding=0, Callback=function(v) trigger.delay=v/100 end })
+TR:AddSlider('TrigCPS',   { Text='Click Interval (x0.01s)',  Default=5,  Min=1, Max=50,  Rounding=0, Callback=function(v) trigger.clickInterval=v/100 end })
+
+-- ── Visuals UI Setup ───────────────────────────────────────────────
+local VL = Tabs.Visuals:AddLeftGroupbox('ESP')
+local VR = Tabs.Visuals:AddRightGroupbox('Settings & World')
+
+VL:AddToggle('ESPOn',    { Text='Enable ESP',       Default=false, Callback=function(v) ESPToggles.master=v end })
+VL:AddToggle('ESPBox',   { Text='Box',              Default=true,  Callback=function(v) ESPToggles.box=v end })
+VL:AddToggle('ESPFill',  { Text='Box Fill',         Default=false, Callback=function(v) ESPToggles.fill=v end })
+VL:AddToggle('ESPName',  { Text='Name',             Default=true,  Callback=function(v) ESPToggles.name=v end })
+VL:AddToggle('ESPDist',  { Text='Distance',         Default=true,  Callback=function(v) ESPToggles.distance=v end })
+VL:AddToggle('ESPWep',   { Text='Weapon',           Default=false, Callback=function(v) ESPToggles.weapon=v end })
+VL:AddToggle('ESPHp',    { Text='Health Bar',       Default=true,  Callback=function(v) ESPToggles.healthbar=v end })
+VL:AddToggle('ESPSkel',  { Text='Skeleton',         Default=false, Callback=function(v) ESPToggles.skeleton=v end })
+VL:AddToggle('ESPSkelO', { Text='Skeleton Outline', Default=false, Callback=function(v) ESPToggles.skeletonOutline=v end })
+
+VR:AddDropdown('ESPType', { Text='Box Type', Default=1, Values={'static','dynamic'}, Callback=function(v) ESPOptions.boundsType=v end })
+VR:AddSlider('ESPScale',  { Text='Box Scale', Default=100, Min=50, Max=200, Rounding=0, Callback=function(v) ESPOptions.boundsScale=v end })
+VR:AddLabel('ESP Color'):AddColorPicker('ESPCol', {
+    Default=ESPOptions.color,
+    Callback=function(v) ESPOptions.color=v end
+})
+
+VR:AddDivider()
+
+VR:AddToggle('Visuals_Enabled', { Text = 'Highlight Players', Default = false })
+VR:AddToggle('Visuals_Gradient', { Text = 'Rainbow Highlights', Default = false })
+VR:AddSlider('Visuals_GradientSpeed', { Text = 'Gradient Speed', Default = 5, Min = 1, Max = 20, Rounding = 0 })
+VR:AddToggle('Visuals_Fill', { Text = 'Fill Enabled', Default = true })
+VR:AddSlider('Visuals_FillTransparency', { Text = 'Fill Transparency', Default = 0.5, Min = 0, Max = 1, Rounding = 2 })
+VR:AddLabel('Fill Color'):AddColorPicker('Visuals_FillColor', { Default = Color3.fromRGB(255, 0, 0) })
+VR:AddToggle('Visuals_Outline', { Text = 'Outline Enabled', Default = true })
+VR:AddSlider('Visuals_OutlineTransparency', { Text = 'Outline Transparency', Default = 0, Min = 0, Max = 1, Rounding = 2 })
+VR:AddLabel('Outline Color'):AddColorPicker('Visuals_OutlineColor', { Default = Color3.fromRGB(255, 255, 255) })
+
+VR:AddDivider()
+
+VR:AddToggle('Ambient_Enabled', { Text = 'Custom Ambient Lighting', Default = false })
+VR:AddLabel('Ambient Color'):AddColorPicker('Ambient_Color', { Default = Color3.fromRGB(128, 128, 128) })
+VR:AddLabel('Outdoor Ambient'):AddColorPicker('OutdoorAmbient_Color', { Default = Color3.fromRGB(128, 128, 128) })
+
+VL:AddDivider()
+
+VL:AddToggle('Skybox_Enabled', { Text = 'Enable Custom Skybox', Default = false })
+VL:AddDropdown('Skybox_Preset', { Values = { 'Default', 'Purple Nebula', 'Night Sky', 'Pink Sky', 'Sunset' }, Default = 1, Text = 'Skybox Preset' })
+VL:AddInput('Skybox_CustomID', { Default = '', Numeric = true, Finished = true, Text = 'Custom Skybox Texture ID', Placeholder = 'Dont Use' })
+
+VR:AddToggle('Weather_Enabled', {
+    Text = 'Enable Weather',
+    Default = false,
+    Callback = function(Value)
+        weatherEnabled = Value
+    end
+})
+
+VR:AddDropdown('Weather_Type', {
+    Values = { 'Rain', 'Snow' },
+    Default = 1,
+    Multi = false,
+    Text = 'Weather Type',
+    Callback = function(Value)
+        selectedWeather = Value
+    end
+})
+
+VR:AddSlider('Weather_Intensity', {
+    Text = 'Weather Intensity',
+    Default = 31,
+    Min = 5,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        weatherIntensity = Value
+    end
+})
+
+VR:AddLabel('Weather Color'):AddColorPicker('Weather_Color', {
+    Default = Color3.fromRGB(200, 220, 255),
+    Callback = function(Value)
+        weatherColor = Value
+    end
+})
+
+VR:AddDivider()
+
+VR:AddToggle('SelfChams_Enabled', {
+    Text = 'Enable Self Chams',
+    Default = false,
+    Callback = function(Value)
+        selfChamsEnabled = Value
+    end
+})
+
+VR:AddDropdown('SelfChams_Style', {
+    Values = { 'Highlight', 'ForceField', 'Solid Color' },
+    Default = 1,
+    Multi = false,
+    Text = 'Chams Style',
+    Callback = function(Value)
+        selfChamsStyle = Value
+    end
+})
+
+VR:AddToggle('SelfChams_Gradient', {
+    Text = 'Rainbow Chams',
+    Default = false,
+    Callback = function(Value)
+        selfChamsGradient = Value
+    end
+})
+
+VR:AddSlider('SelfChams_GradSpeed', {
+    Text = 'Rainbow Speed',
+    Default = 5,
+    Min = 1,
+    Max = 20,
+    Rounding = 0,
+    Callback = function(Value)
+        selfGradientSpeed = Value
+    end
+})
+
+VR:AddSlider('SelfChams_FillTrans', {
+    Text = 'Transparency / Alpha',
+    Default = 0,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        selfFillTrans = Value / 100
+    end
+})
+
+VR:AddLabel('Chams Color / Fill'):AddColorPicker('SelfChams_Color', {
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(Value)
+        selfFillColor = Value
+    end
+})
+
+VR:AddLabel('Outline Color (Highlight Only)'):AddColorPicker('SelfChams_OutlineColor', {
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(Value)
+        selfOutlineColor = Value
+    end
+})
+
+VR:AddDivider()
+
+VR:AddToggle('FOV_Enabled', {
+    Text = 'Enable FOV Changer',
+    Default = false,
+    Callback = function(Value)
+        fovEnabled = Value
+        if not Value then
+            workspace.CurrentCamera.FieldOfView = 70
+        end
+    end
+})
+
+VR:AddSlider('FOV_Value', {
+    Text = 'Field of View',
+    Default = 90,
+    Min = 30,
+    Max = 120,
+    Rounding = 0,
+    Callback = function(Value)
+        customFov = Value
+    end
+})
+
+-- Bloom & ColorCorrection Groupbox
+local VL_BloomCC = Tabs.Visuals:AddLeftGroupbox('Bloom & ColorCorrection')
+
+VL_BloomCC:AddToggle('CC_Enabled', {
+    Text = 'Enable Color Correction',
+    Default = false,
+    Callback = function(Value)
+        ccEnabled = Value
+        updateColorCorrection(
+            Options.CC_Brightness.Value / 100,
+            Options.CC_Contrast.Value / 100,
+            Options.CC_Saturation.Value / 100,
+            Options.CC_TintColor.Value
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('CC_Brightness', {
+    Text = 'Brightness',
+    Default = 0,
+    Min = -100,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        updateColorCorrection(
+            Value / 100,
+            Options.CC_Contrast.Value / 100,
+            Options.CC_Saturation.Value / 100,
+            Options.CC_TintColor.Value
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('CC_Contrast', {
+    Text = 'Contrast',
+    Default = 0,
+    Min = -100,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        updateColorCorrection(
+            Options.CC_Brightness.Value / 100,
+            Value / 100,
+            Options.CC_Saturation.Value / 100,
+            Options.CC_TintColor.Value
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('CC_Saturation', {
+    Text = 'Saturation',
+    Default = 0,
+    Min = -100,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        updateColorCorrection(
+            Options.CC_Brightness.Value / 100,
+            Options.CC_Contrast.Value / 100,
+            Value / 100,
+            Options.CC_TintColor.Value
+        )
+    end
+})
+
+VL_BloomCC:AddLabel('Tint Color'):AddColorPicker('CC_TintColor', {
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(Value)
+        updateColorCorrection(
+            Options.CC_Brightness.Value / 100,
+            Options.CC_Contrast.Value / 100,
+            Options.CC_Saturation.Value / 100,
+            Value
+        )
+    end
+})
+
+VL_BloomCC:AddDivider()
+
+VL_BloomCC:AddToggle('Bloom_Enabled', {
+    Text = 'Enable Bloom Effect',
+    Default = false,
+    Callback = function(Value)
+        bloomEnabled = Value
+        updateBloom(
+            Options.Bloom_Intensity.Value / 5,
+            Options.Bloom_Size.Value,
+            Options.Bloom_Threshold.Value / 100
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('Bloom_Intensity', {
+    Text = 'Bloom Intensity',
+    Default = 15,
+    Min = 0,
+    Max = 50,
+    Rounding = 0,
+    Callback = function(Value)
+        updateBloom(
+            Value / 5,
+            Options.Bloom_Size.Value,
+            Options.Bloom_Threshold.Value / 100
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('Bloom_Size', {
+    Text = 'Bloom Size',
+    Default = 24,
+    Min = 1,
+    Max = 56,
+    Rounding = 0,
+    Callback = function(Value)
+        updateBloom(
+            Options.Bloom_Intensity.Value / 5,
+            Value,
+            Options.Bloom_Threshold.Value / 100
+        )
+    end
+})
+
+VL_BloomCC:AddSlider('Bloom_Threshold', {
+    Text = 'Bloom Threshold',
+    Default = 0,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        updateBloom(
+            Options.Bloom_Intensity.Value / 5,
+            Options.Bloom_Size.Value,
+            Value / 100
+        )
+    end
+})
+
+local TimeGroup = Tabs.Visuals:AddRightGroupbox('World Time Control')
+
+TimeGroup:AddSlider('TimeSlider', {
+    Text = 'Time of Day',
+    Default = 14,
+    Min = 0,
+    Max = 24,
+    Rounding = 1,
+    Callback = function(Value)
+        setGameTime(Value)
+    end
+})
+
+TimeGroup:AddToggle('FreezeTimeToggle', {
+    Text = 'Lock Selected Time',
+    Default = false,
+    Callback = function(Value)
+        TimeSystem.FreezeTime = Value
+    end
+})
+
+TimeGroup:AddButton({
+    Text = 'Day (12 PM)',
+    Func = function()
+        Options.TimeSlider:SetValue(12)
+    end
+})
+
+TimeGroup:AddButton({
+    Text = 'Night (0 AM)',
+    Func = function()
+        Options.TimeSlider:SetValue(0)
+    end
+})
+
+TimeGroup:AddButton({
+    Text = 'Sunset (18 PM)',
+    Func = function()
+        Options.TimeSlider:SetValue(18)
+    end
+})
+
+-- ── Movement ──────────────────────────────────────────────────────
+local ML = Tabs.Movement:AddLeftGroupbox('Player')
+ML:AddToggle('SpeedOn',  { Text='Speed Modifier', Default=false, Callback=function(v) speedEnabled=v; applySpeed() end })
+ML:AddSlider('WalkSpd',  { Text='Walk Speed', Default=16, Min=16, Max=500, Rounding=0, Callback=function(v) walkSpeed=v; if speedEnabled then applySpeed() end end })
+ML:AddToggle('FlyOn',    { Text='Fly',        Default=false, Callback=function(v) toggleFly(v) end })
+ML:AddSlider('FlySpd',   { Text='Fly Speed',  Default=50, Min=10, Max=300, Rounding=0, Callback=function(v) flySpeed=v end })
+ML:AddToggle('JumpOn',   { Text='Jump Modifier',  Default=false, Callback=function(v) jumpEnabled=v; applyJump() end })
+ML:AddSlider('JumpPwr',  { Text='Jump Power', Default=50, Min=50, Max=500, Rounding=0, Callback=function(v) jumpPower=v; if jumpEnabled then applyJump() end end })
+ML:AddToggle('SpinBotOn', { 
+    Text = 'Spinbot', 
+    Default = false, 
+    Callback = function(Value) 
+        spinEnabled = Value 
+    end 
+})
+
+ML:AddSlider('SpinSpeed', { 
+    Text = 'Spin Speed', 
+    Default = 10, 
+    Min = 1, 
+    Max = 100, 
+    Rounding = 0, 
+    Callback = function(Value) 
+        spinSpeed = Value 
+    end 
+})
+
+-- ── Crosshair ─────────────────────────────────────────────────────
+local CHL = Tabs.Crosshair:AddLeftGroupbox('Main')
+local CHR = Tabs.Crosshair:AddRightGroupbox('Circle & Colors')
+
+CHL:AddToggle('CHVis',   { Text='Show Crosshair',   Default=false, Callback=function(v) CH.Visible=v end })
+CHL:AddSlider('CHSpin',  { Text='Spin Speed',        Default=5,   Min=0,  Max=50,  Rounding=0, Callback=function(v) CH.SpinSpeed=v/1000 end })
+CHL:AddSlider('CHGap',   { Text='Central Gap (px)',  Default=8,   Min=0,  Max=50,  Rounding=0, Callback=function(v) CH.CentralGap=v end })
+CHL:AddSlider('CHLen',   { Text='Total Length (px)', Default=112, Min=10, Max=300, Rounding=0, Callback=function(v) CH.TotalLength=v; initCH() end })
+CHL:AddSlider('CHThick', { Text='Line Thickness',    Default=2,   Min=1,  Max=10,  Rounding=0, Callback=function(v) CH.LineThickness=v end })
+CHL:AddSlider('CHOut',   { Text='Outline Thickness', Default=4,   Min=0,  Max=15,  Rounding=0, Callback=function(v) CH.OutlineThickness=v end })
+CHL:AddToggle('CHTrack', { Text='Enable Tracking',   Default=false, Callback=function(v) CH.TrackingEnabled=v end })
+CHL:AddSlider('CHTRad',  { Text='Tracking Radius',   Default=150, Min=10, Max=800, Rounding=0, Callback=function(v) CH.TrackingRadius=v end })
+CHL:AddSlider('CHTSmooth', { Text='Tracking Smoothness', Default=20, Min=1, Max=100, Rounding=0, Callback=function(v) CH.TrackingSmoothness=v/100 end })
+CHL:AddDropdown('CHTgt', { Text='Target Part',       Default=1, Values={'Head','HumanoidRootPart'}, Callback=function(v) CH.TrackPart=v end })
+CHL:AddToggle('CHTChk',  { Text='Team Check',        Default=true, Callback=function(v) CH.TeamCheck=v end })
+
+CHR:AddToggle('CHCirVis',{ Text='Circle Visible',    Default=true, Callback=function(v) CH.CircleVisible=v end })
+CHR:AddSlider('CHCirR',  { Text='Circle Radius',     Default=119, Min=10, Max=300, Rounding=0, Callback=function(v) CH.CircleRadius=v end })
+CHR:AddSlider('CHCirT',  { Text='Transparency',      Default=30,  Min=0,  Max=100, Rounding=0, Callback=function(v) CH.CircleTransparency=v/100 end })
+CHR:AddLabel('Line Start'):AddColorPicker('CHColS', { Default=Color3.fromRGB(180,180,180), Callback=function(v) CH.ColorStart=v end })
+CHR:AddLabel('Line End'):AddColorPicker('CHColE',   { Default=Color3.fromRGB(20,20,20),    Callback=function(v) CH.ColorEnd=v end })
+CHR:AddLabel('Circle Color'):AddColorPicker('CHCirC',{ Default=Color3.fromRGB(15,15,25),  Callback=function(v) CH.CircleColor=v end })
+
+local SG = Tabs.Crosshair:AddLeftGroupbox('Custom Shiftlock Icon')
+
+SG:AddToggle('EnableShiftIcon', {
+    Text = 'Enable Custom Icon',
+    Default = false,
+    Callback = function(Value)
+        ShiftLockSystem.Enabled = Value
+    end
+})
+
+SG:AddDropdown('PresetShiftDropdown', {
+    Values = ShiftPresetNames,
+    Default = 1,
+    Multi = false,
+    Text = 'Select Preset Crosshair',
+    Callback = function(Value)
+        local id = ShiftPresets[Value]
+        if id then
+            ShiftLockSystem.CurrentID = id
+        end
+    end
+})
+
+SG:AddInput('CustomShiftID_Input', {
+    Default = '',
+    Numeric = true,
+    Finished = true,
+    Text = 'Custom Asset ID',
+    Placeholder = 'Custom ID eingeben...',
+    Callback = function(Value)
+        if Value and Value ~= "" then
+            ShiftLockSystem.CurrentID = Value
+        end
+    end
+})
+
+SG:AddSlider('ShiftIconSizeSlider', {
+    Text = 'Icon Size',
+    Default = 32,
+    Min = 10,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        ShiftLockSystem.IconSize = Value
+    end
+})
+
+-- ── Misc ──────────────────────────────────────────────────────────
+local MiscGroup = Tabs.Misc:AddLeftGroupbox('Watermark Settings')
+
+MiscGroup:AddToggle('WM_Enabled', {
+    Text = 'Show Watermark',
+    Default = true,
+    Callback = function(Value)
+        WM_Config.Enabled = Value
+        Library:SetWatermarkVisibility(Value)
+    end
+})
+
+MiscGroup:AddInput('WM_Text', {
+    Default = 'Santa V.1',
+    Numeric = false,
+    Finished = true,
+    Text = 'Watermark Title',
+    Placeholder = 'Text eingeben...',
+    Callback = function(Value)
+        WM_Config.Text = Value
+    end
+})
+
+MiscGroup:AddToggle('WM_ShowFPS', {
+    Text = 'Show FPS',
+    Default = true,
+    Callback = function(Value)
+        WM_Config.ShowFPS = Value
+    end
+})
+
+MiscGroup:AddToggle('WM_ShowPing', {
+    Text = 'Show Ping',
+    Default = true,
+    Callback = function(Value)
+        WM_Config.ShowPing = Value
+    end
+})
+
+MiscGroup:AddToggle('WM_ShowTime', {
+    Text = 'Show Time',
+    Default = true,
+    Callback = function(Value)
+        WM_Config.ShowTime = Value
+    end
+})
+
+-- ── UI Settings ───────────────────────────────────────────────────
+local UL = Tabs.Settings:AddLeftGroupbox('Menu')
+UL:AddButton({ Text='Unload', Func=function() Library:Unload() end })
+UL:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', { Default='End', NoUI=true, Text='Menu keybind' })
+Library.ToggleKeybind = Options.MenuKeybind
+
+---------------------------------------------------------
+-- VISUALS LOGIC (AFTER UI INIT)
+---------------------------------------------------------
+local OriginalAmbient = Lighting.Ambient
+local OriginalOutdoorAmbient = Lighting.OutdoorAmbient
+
+local SkyboxPresets = {
+    ['Purple Nebula'] = 'rbxassetid://159454299',
+    ['Night Sky'] = 'rbxassetid://12064107',
+    ['Pink Sky'] = 'rbxassetid://271042516',
+    ['Sunset'] = 'rbxassetid://600832712'
+}
+
+local function applyHighlight(player)
+    if player == LocalPlayer then return end
+    
+    local function setupCharacter(character)
+        if not character then return end
+        
+        local highlight = character:FindFirstChild("CustomHighlight") or Instance.new("Highlight")
+        highlight.Name = "CustomHighlight"
+        highlight.Adornee = character
+        
+        highlight.Enabled = Toggles.Visuals_Enabled.Value
+        highlight.FillColor = Options.Visuals_FillColor.Value
+        highlight.OutlineColor = Options.Visuals_OutlineColor.Value
+        highlight.FillTransparency = Toggles.Visuals_Fill.Value and Options.Visuals_FillTransparency.Value or 1
+        highlight.OutlineTransparency = Toggles.Visuals_Outline.Value and Options.Visuals_OutlineTransparency.Value or 1
+            
+        highlight.Parent = character
+    end
+
+    if player.Character then setupCharacter(player.Character) end
+    player.CharacterAdded:Connect(setupCharacter)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do applyHighlight(player) end
+Players.PlayerAdded:Connect(applyHighlight)
+
+local hGradient = 0
+local mainConnection
+
+mainConnection = RunService.RenderStepped:Connect(function(deltaTime)
+    if Library.Unloaded then
+        if mainConnection then mainConnection:Disconnect() end
+        return
+    end
+
+    if Toggles.Visuals_Gradient.Value then
+        local speed = Options.Visuals_GradientSpeed.Value
+        hGradient = (hGradient + (deltaTime * speed * 0.2)) % 1
+    end
+
+    local currentGradientColor = Color3.fromHSV(hGradient, 1, 1)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character and player.Character:FindFirstChild("CustomHighlight") then
+            local hl = player.Character.CustomHighlight
+            hl.Enabled = Toggles.Visuals_Enabled.Value
+            
+            if Toggles.Visuals_Gradient.Value then
+                hl.FillColor = currentGradientColor
+                hl.OutlineColor = currentGradientColor
+            else
+                hl.FillColor = Options.Visuals_FillColor.Value
+                hl.OutlineColor = Options.Visuals_OutlineColor.Value
+            end
+
+            hl.FillTransparency = Toggles.Visuals_Fill.Value and Options.Visuals_FillTransparency.Value or 1
+            hl.OutlineTransparency = Toggles.Visuals_Outline.Value and Options.Visuals_OutlineTransparency.Value or 1
+        end
+    end
+
+    if Toggles.Ambient_Enabled.Value then
+        Lighting.Ambient = Options.Ambient_Color.Value
+        Lighting.OutdoorAmbient = Options.OutdoorAmbient_Color.Value
+    else
+        Lighting.Ambient = OriginalAmbient
+        Lighting.OutdoorAmbient = OriginalOutdoorAmbient
+    end
+end)
+
+local function updateSkybox()
+    local currentSky = Lighting:FindFirstChildOfClass("Sky")
+    
+    if not Toggles.Skybox_Enabled.Value then
+        if currentSky and currentSky.Name == "SantaCustomSky" then
+            currentSky:Destroy()
+        end
+        return
+    end
+
+    if not currentSky or currentSky.Name ~= "SantaCustomSky" then
+        currentSky = Instance.new("Sky")
+        currentSky.Name = "SantaCustomSky"
+        currentSky.Parent = Lighting
+    end
+
+    local selectedPreset = Options.Skybox_Preset.Value
+    local customId = Options.Skybox_CustomID.Value
+    local textureUri = ''
+
+    if customId and customId ~= '' then
+        textureUri = 'rbxassetid://' .. customId
+    elseif SkyboxPresets[selectedPreset] then
+        textureUri = SkyboxPresets[selectedPreset]
+    end
+
+    if textureUri ~= '' then
+        currentSky.SkyboxBk = textureUri
+        currentSky.SkyboxDn = textureUri
+        currentSky.SkyboxFt = textureUri
+        currentSky.SkyboxLf = textureUri
+        currentSky.SkyboxRt = textureUri
+        currentSky.SkyboxUp = textureUri
+    end
+end
+
+Toggles.Skybox_Enabled:OnChanged(updateSkybox)
+Options.Skybox_Preset:OnChanged(updateSkybox)
+Options.Skybox_CustomID:OnChanged(updateSkybox)
+
+local FrameCounter = 0
+local LastGetFps = tick()
+local CurrentFPS = 60
+
+RunService.RenderStepped:Connect(function()
+    FrameCounter = FrameCounter + 1
+    if (tick() - LastGetFps) >= 1 then
+        CurrentFPS = FrameCounter
+        FrameCounter = 0
+        LastGetFps = tick()
+    end
+
+    if WM_Config.Enabled then
+        local parts = {}
+
+        if WM_Config.Text ~= "" then
+            table.insert(parts, WM_Config.Text)
+        end
+
+        if WM_Config.ShowFPS then
+            table.insert(parts, string.format("%d fps", CurrentFPS))
+        end
+
+        if WM_Config.ShowPing then
+            local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            table.insert(parts, string.format("%d ms", ping))
+        end
+
+        if WM_Config.ShowTime then
+            table.insert(parts, os.date("%X"))
+        end
+
+        Library:SetWatermark(table.concat(parts, " | "))
+    end
+end)
+
+-- ── Final Manager Init ─────────────────────────────────────────────
+Library:SetWatermarkVisibility(WM_Config.Enabled)
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
+ThemeManager:SetFolder('TeddyHub')
+SaveManager:SetFolder('TeddyHub/Config')
+SaveManager:BuildConfigSection(Tabs.Settings)
+ThemeManager:ApplyToTab(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
